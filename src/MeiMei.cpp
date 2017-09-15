@@ -116,7 +116,7 @@ int main(int argc, char* argv[]) {
 		int addr = SNEStoPC((int)readLong(prev, 0x07730C));
 		prev->readData(&prevEx, 0x0400, addr);
 	}
-	delete prev;
+
 	pixiOption = pixiOption + " " + romName;
 	system(pixiOption.c_str());
 
@@ -133,9 +133,11 @@ int main(int argc, char* argv[]) {
 			break;
 		}
 	}
-
-	if(changeEx||always) {
+	bool revert = changeEx||always;
+	if(changeEx) {
 		printf("\nExtra bytes change detected\n");
+	}
+	if(changeEx||always) {
 		uchar sprAllData[SPR_ADDR_LIMIT];
 		uchar sprCommonData[3];
 		bool remapped[0x0200];
@@ -158,34 +160,44 @@ int main(int argc, char* argv[]) {
 			int prevOfs = 1;
 			int nowOfs = 1;
 			bool changeData = false;
+			#define OF_NOW_OFS() if(nowOfs>=SPR_ADDR_LIMIT) {ERR("Sprite data is too large!")};
+
 			while(true) {
 				now->readData(&sprCommonData, 3, sprAddrPC+prevOfs);
+				if(nowOfs >= SPR_ADDR_LIMIT-3) {
+					ERR("Sprite data is too large!");
+				}
 				if(sprCommonData[0]==0xFF) {
 					sprAllData[nowOfs++] = 0xFF;
 					break;
 				}
-				sprAllData[nowOfs++] = sprCommonData[0];
-				sprAllData[nowOfs++] = sprCommonData[1];
-				sprAllData[nowOfs++] = sprCommonData[2];
+				sprAllData[nowOfs++] = sprCommonData[0];	// YYYYEEsy
+				sprAllData[nowOfs++] = sprCommonData[1];	// XXXXSSSS
+				sprAllData[nowOfs++] = sprCommonData[2];	// NNNNNNNN
 
 				int sprNum = ((sprCommonData[0]&0x0C)<<6)|(sprCommonData[2]);
+
 				if(nowEx[sprNum] > prevEx[sprNum]) {
 					changeData = true;
 					int i;
 					for(i=3;i<prevEx[sprNum];i++) {
 						sprAllData[nowOfs++] = readByte(now, sprAddrPC+prevOfs+i);
+						OF_NOW_OFS();
 					}
 					for(;i<nowEx[sprNum];i++) {
 						sprAllData[nowOfs++] = 0x00;
+						OF_NOW_OFS();
 					}
 				} else if(nowEx[sprNum] < prevEx[sprNum]){
 					changeData = true;
 					for(int i=3;i<nowEx[sprNum];i++) {
 						sprAllData[nowOfs++] = readByte(now, sprAddrPC+prevOfs+i);
+						OF_NOW_OFS();
 					}
 				} else {
 					for(int i=3;i<nowEx[sprNum];i++) {
 						sprAllData[nowOfs++] = readByte(now, sprAddrPC+prevOfs+i);
+						OF_NOW_OFS();
 					}
 				}
 				prevOfs += prevEx[sprNum];
@@ -216,12 +228,7 @@ int main(int argc, char* argv[]) {
 				}
 			}
 			if(debug) {
-				printf("Level%03X Address:$%06X (SNES:$%06X) Remap:", lv, sprAddrPC+0x0200, sprAddrSNES);;
-				if(changeData) {
-					printf("Yes\n");
-				} else {
-					printf("No\n");
-				}
+				printf("Level%03X Address:$%06X (SNES:$%06X) Remap:%s\n", lv, sprAddrPC+0x0200, sprAddrSNES, changeData ? "Yes" : "No");
 				if(changeData) {
 					printf("Data size:$%04X -> $%04X\n", prevOfs, nowOfs);
 					printf("Remapped Address:$%06X (SNES:$%06X)\n\n", remappedAddrPC+0x0200, remappedAddrSNES);
@@ -233,9 +240,15 @@ int main(int argc, char* argv[]) {
 			}
 		}
 		printf("Sprite data remapped successfully.\n");
+		revert = false;
 	}
 	now->writeRomFile();
 end:
+	if(revert) {
+		prev->writeRomFile();
+		printf("\n\nError occureted. Your rom has reverted to before insert.\n");
+	}
+	delete prev;
 	delete now;
 
 	return 0;
