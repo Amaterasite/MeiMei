@@ -14,7 +14,7 @@ typedef unsigned char uchar;
 
 const int SPR_ADDR_LIMIT = 0x800;
 
-#define ERR(msg) printf("ERROR: "); printf(msg); goto end;
+#define ERR(msg) {printf("Error: %s", msg); goto end; }
 
 uchar readByte(Rom* r, int addr) {
 	uchar tmp;
@@ -56,14 +56,24 @@ int PCtoSNES(int addr) {
 	return ((addr&0x7FFF)+0x8000)+((addr&0x3F8000)<<1);
 }
 
+void wait() {
+	fflush(stdin);
+	getc(stdin);
+}
+
 int main(int argc, char* argv[]) {
 	bool debug = false;
 	bool always = false;
 	string romName;
 	string pixiOption = "PIXI.exe";
+	ifstream testFile;
+
+	if(argc < 2) {
+		atexit(wait);
+	}
 
 	if(argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--h") || !strcmp(argv[1], "--help"))) {
-		printf("MeiMei version 0.01 by Akaginite\n");
+		printf("MeiMei version 0.01\n");
 		printf("Usage: MeiMei [MeiMei's option] [PIXI's option] [Rom file]\n");
 		printf("--d : Enable debug output\n");
 		printf("--a : Enable always remap sprite data\n");
@@ -89,19 +99,27 @@ int main(int argc, char* argv[]) {
 			}
 		}
 	}
+
+	testFile.open("pixi.exe");
+	if(!testFile) {
+		printf("Error: PIXI.exe is not found.\n"
+				"Please move MeiMei.exe to PIXI's directory.\n");
+		return 0;
+	}
+	testFile.close();
+
 	while(true) {
-		ifstream romFile;
 		if(romName == "") {
 			printf("Input rom name : ");
 			cin >> romName;
 		}
-		romFile.open(romName.c_str());
-		if(!romFile) {
+		testFile.open(romName.c_str());
+		if(!testFile) {
 			printf("%s is not found\n", romName.c_str());
 			romName = "";
 			continue;
 		}
-		romFile.close();
+		testFile.close();
 		break;
 	}
 	uchar prevEx[0x400];
@@ -160,7 +178,7 @@ int main(int argc, char* argv[]) {
 			int prevOfs = 1;
 			int nowOfs = 1;
 			bool changeData = false;
-			#define OF_NOW_OFS() if(nowOfs>=SPR_ADDR_LIMIT) {ERR("Sprite data is too large!")};
+			#define OF_NOW_OFS() if(nowOfs>=SPR_ADDR_LIMIT) ERR("Sprite data is too large!");
 
 			while(true) {
 				now->readData(&sprCommonData, 3, sprAddrPC+prevOfs);
@@ -246,7 +264,8 @@ int main(int argc, char* argv[]) {
 end:
 	if(revert) {
 		prev->writeRomFile();
-		printf("\n\nError occureted. Your rom has reverted to before insert.\n");
+		printf("\n\nError occureted in MeiMei.\n"
+				"Your rom has reverted to before insert.\n");
 	}
 	delete prev;
 	delete now;

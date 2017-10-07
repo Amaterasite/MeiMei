@@ -175,12 +175,13 @@ int Rom::findFreeSpace(int startAddr,int endAddr,int size,Rom::EBankBorder borde
 				if(buf == freeSpaceNum) {
 					// 要求分の空き領域を発見できた場合おしまい。
 					if(++freeCount == size)	return (addr - size);
-				}
 				// 空きじゃなかったんで最初から
-				else freeCount = 0;
-			}
+				} else {
+					freeCount = 0;
+					addr--;	// RATS確認のために読み直し
+				}
 			// 空き領域探索前にやること
-			else{
+			} else {
 				// RATS保護範囲内はスルー
 				RATSsize = checkRATSdata(addr);
 				if(RATSsize > 0) {
